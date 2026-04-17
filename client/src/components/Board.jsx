@@ -1,23 +1,41 @@
 import { useRef, useEffect, useState } from "react";
 import { setupCanvas, redraw } from "../utils/canvahelper.js";
+import { io } from "socket.io-client";
+
+const socket = io("http://localhost:3000");
 
 export default function Board() {
     const canvasRef = useRef(null);
     const ctxRef = useRef(null);
-    
-    // central state (IMPORTANT)
-    const [elements, setElements] = useState([]);
+
+    const [elements, setElements] = useState([]);//array of all drawn object 
 
     const WIDTH = 600;
     const HEIGHT = 400;
 
     useEffect(() => {
         const canvas = canvasRef.current;
-
         ctxRef.current = setupCanvas(canvas, WIDTH, HEIGHT);
     }, []);
 
-    // redraw whenever state changes
+    // 🔁 initial sync from server
+    useEffect(() => {
+        socket.on("init", (serverElements) => {
+            setElements(serverElements);
+        });
+
+        socket.on("update-elements", (serverElements) => {
+            setElements(serverElements);
+            console.log(serverElements)
+        });
+
+        return () => {
+            socket.off("init");
+            socket.off("update-elements");
+        };
+    }, []);
+
+    // redraw
     useEffect(() => {
         if (!ctxRef.current) return;
         redraw(ctxRef.current, elements);
@@ -37,8 +55,9 @@ export default function Board() {
             color: "black",
         };
 
-        // update state (immutable)
-        setElements(prev => [...prev, newCircle]);
+        // ❗ DO NOT update local state directly
+        // send to server instead
+        socket.emit("add-element", newCircle);
     }
 
     return (

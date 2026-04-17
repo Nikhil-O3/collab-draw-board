@@ -1,28 +1,51 @@
 import express from "express";
 import dotenv from "dotenv";
+import { createServer } from "http";
+import { Server } from "socket.io";
 
-// load env
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// trust proxy
-app.set("trust proxy", true);
+// HTTP server (required for socket.io)
+const httpServer = createServer(app);
 
-// middleware
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// socket server
+const io = new Server(httpServer, {
+  cors: {
+    origin: "*", // allow frontend
+  },
+});
 
-// routes
-app.get("/", (req, res) => {
-  res.json({
-    message: "ok",
-    ip: req.ip
+// global state (shared)
+let elements = [];
+
+// connection
+io.on("connection", (socket) => {
+  console.log("User connected:", socket.id);
+
+  // send current state to new user
+  socket.emit("init", elements);
+
+  // receive new element
+  socket.on("add-element", (element) => {
+    elements.push(element);
+
+    // broadcast updated array to all clients
+    io.emit("update-elements", elements);
+  });
+
+  socket.on("disconnect", () => {
+    console.log("User disconnected:", socket.id);
   });
 });
 
-// start server
-app.listen(PORT, () => {
+// express routes
+app.get("/", (req, res) => {
+  res.json({ message: "ok", ip: req.ip });
+});
+
+httpServer.listen(PORT, () => {
   console.log(`http://localhost:${PORT}`);
 });
